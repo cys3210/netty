@@ -79,11 +79,13 @@ public interface Channel extends AttributeMap, ChannelOutboundInvoker, Comparabl
     /**
      * Returns the globally unique identifier of this {@link Channel}.
      */
+    // 全局唯一的 channelId
     ChannelId id();
 
     /**
      * Return the {@link EventLoop} this {@link Channel} was registered to.
      */
+    // 一个时间轮巡器
     EventLoop eventLoop();
 
     /**

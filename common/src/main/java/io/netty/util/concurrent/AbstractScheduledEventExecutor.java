@@ -26,6 +26,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 /**
+ * 支持 EventExecutor 定时调度的基类
+ *
  * Abstract base class for {@link EventExecutor}s that want to support scheduling.
  */
 public abstract class AbstractScheduledEventExecutor extends AbstractEventExecutor {
@@ -61,6 +63,9 @@ public abstract class AbstractScheduledEventExecutor extends AbstractEventExecut
     }
 
     /**
+     *
+     *
+     *
      * The initial value used for delay and computations based upon a monatomic time source.
      * @return initial value used for delay and computations based upon a monatomic time source.
      */

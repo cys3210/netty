@@ -123,6 +123,7 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
 
     @Override
     void init(Channel channel) {
+        // 设置一些可选项,属性
         setChannelOptions(channel, options0().entrySet().toArray(newOptionArray(0)), logger);
         setAttributes(channel, attrs0().entrySet().toArray(newAttrArray(0)));
 
@@ -134,19 +135,26 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
                 childOptions.entrySet().toArray(newOptionArray(0));
         final Entry<AttributeKey<?>, Object>[] currentChildAttrs = childAttrs.entrySet().toArray(newAttrArray(0));
 
+        // ChannelInitializer 是一个特殊的 ChannelInBoundHandler, 会在 Channel 注册时调用，
+        // 在调用结束后会从 ChannelPipeline 移除
+
+        // 添加 NioServerSocketChannel 的初始化处理器
         p.addLast(new ChannelInitializer<Channel>() {
             @Override
             public void initChannel(final Channel ch) {
+                // 将 handler 添加到 NioServerSocketChannel 的 pipeline 中
                 final ChannelPipeline pipeline = ch.pipeline();
                 ChannelHandler handler = config.handler();
                 if (handler != null) {
                     pipeline.addLast(handler);
                 }
 
+                // 加入了一个新连接处理器
                 ch.eventLoop().execute(new Runnable() {
                     @Override
                     public void run() {
                         pipeline.addLast(new ServerBootstrapAcceptor(
+
                                 ch, currentChildGroup, currentChildHandler, currentChildOptions, currentChildAttrs));
                     }
                 });

@@ -63,7 +63,10 @@ public abstract class ChannelInitializer<C extends Channel> extends ChannelInbou
      * This method will be called once the {@link Channel} was registered. After the method returns this instance
      * will be removed from the {@link ChannelPipeline} of the {@link Channel}.
      *
-     * @param ch            the {@link Channel} which was registered.
+     * 当前 Channel 在注册后， initChannel 方法将会被调用。在 initChannel 方法完成后当前对象(ChannelInitialize)会被注册后
+     * Channel 的 ChannelPipeline 移除掉
+     *
+     * @param ch            the {@link Channel} which was registered.   进行注册的Channel
      * @throws Exception    is thrown if an error occurs. In that case it will be handled by
      *                      {@link #exceptionCaught(ChannelHandlerContext, Throwable)} which will by default close
      *                      the {@link Channel}.

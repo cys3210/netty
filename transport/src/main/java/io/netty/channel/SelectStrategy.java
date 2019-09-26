@@ -18,7 +18,10 @@ package io.netty.channel;
 import io.netty.util.IntSupplier;
 
 /**
+ *
  * Select strategy interface.
+ *
+ * 提供对 select loop 行为的控制策略， 例如： 如果有 events 要被立即执行， 一个阻塞的 select 操作会被延迟或者完全跳过
  *
  * Provides the ability to control the behavior of the select loop. For example a blocking select
  * operation can be delayed or skipped entirely if there are events to process immediately.
@@ -26,14 +29,20 @@ import io.netty.util.IntSupplier;
 public interface SelectStrategy {
 
     /**
+     * 代表下一步应该 blocking select 操作
+     *
      * Indicates a blocking select should follow.
      */
     int SELECT = -1;
     /**
+     * 代表 IO loop 应该被重试， 下一步不会进行 blocking select 操作
+     *
      * Indicates the IO loop should be retried, no blocking select to follow directly.
      */
     int CONTINUE = -2;
     /**
+     * 代表在 IO loop 会在不阻塞的情况下轮询新事件  NIO不支持
+     *
      * Indicates the IO loop to poll for new events without blocking.
      */
     int BUSY_WAIT = -3;

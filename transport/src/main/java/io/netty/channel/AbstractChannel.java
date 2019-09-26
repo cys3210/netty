@@ -26,11 +26,7 @@ import io.netty.util.internal.logging.InternalLogger;
 import io.netty.util.internal.logging.InternalLoggerFactory;
 
 import java.io.IOException;
-import java.net.ConnectException;
-import java.net.InetSocketAddress;
-import java.net.NoRouteToHostException;
-import java.net.SocketAddress;
-import java.net.SocketException;
+import java.net.*;
 import java.nio.channels.ClosedChannelException;
 import java.nio.channels.NotYetConnectedException;
 import java.util.concurrent.Executor;
@@ -71,6 +67,9 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
         this.parent = parent;
         id = newId();
         unsafe = newUnsafe();
+        // A list of ChannelHandlers which handles or intercepts inbound events and outbound operations of a
+        // Channel
+        // 对 Channel inbound 事件 和 outbound 操作 进行拦截或者处理的一个处理器集合
         pipeline = newChannelPipeline();
     }
 
@@ -463,8 +462,16 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
                 return;
             }
 
+            // 绑定 eventLoop
             AbstractChannel.this.eventLoop = eventLoop;
 
+
+            // 若线程没有启动，会提交一个注册任务，并启动线程，在不停的轮询中执行注册
+            // 之后 不断的 select I/O事件， 处理 I/O 事件，
+            // 执行 task(除少数 Netty自定义的task外， 用户可以提交task到此线程中运行)
+
+            // 若线程已经启动， 直接执行注册方法 将 Channel 注册到 Selector 上
+            // 之后线程 开始 select process(connect read(fireChannelReadComplete -> Handler) write runTask)
             if (eventLoop.inEventLoop()) {
                 register0(promise);
             } else {
@@ -490,19 +497,28 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
             try {
                 // check if the channel is still open as it could be closed in the mean time when the register
                 // call was outside of the eventLoop
+                // 由于EventLoop 之外的线程， 可能会关闭 Channel，所以在这里检测 Channel是否还是打开的
                 if (!promise.setUncancellable() || !ensureOpen(promise)) {
                     return;
                 }
+                // 是否第一次注册
                 boolean firstRegistration = neverRegistered;
+
+                // 执行注册逻辑, 一般由子类实现
                 doRegister();
+
+                // 是否从未注册过
                 neverRegistered = false;
+                // 是否已经注册
                 registered = true;
 
                 // Ensure we call handlerAdded(...) before we actually notify the promise. This is needed as the
                 // user may already fire events through the pipeline in the ChannelFutureListener.
                 pipeline.invokeHandlerAddedIfNeeded();
 
+                // 回调通知 promise 执行成功
                 safeSetSuccess(promise);
+                // 触发 通知已经注册事件
                 pipeline.fireChannelRegistered();
                 // Only fire a channelActive if the channel has never been registered. This prevents firing
                 // multiple channel actives if the channel is deregistered and re-registered.
@@ -971,6 +987,7 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
                 return true;
             }
 
+            // 回调通知 promise Channel关闭的异常
             safeSetFailure(promise, newClosedChannelException(initialCloseCause));
             return false;
         }

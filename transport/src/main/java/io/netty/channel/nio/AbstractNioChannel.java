@@ -81,6 +81,7 @@ public abstract class AbstractNioChannel extends AbstractChannel {
         this.ch = ch;
         this.readInterestOp = readInterestOp;
         try {
+            // 将 nio包中的 ServerSocketChannel 设置为非阻塞
             ch.configureBlocking(false);
         } catch (IOException e) {
             try {
@@ -377,6 +378,7 @@ public abstract class AbstractNioChannel extends AbstractChannel {
         boolean selected = false;
         for (;;) {
             try {
+                // 将jdk原有的 socketChannel,ServerSocketChannel 注册到 eventLoop 中的 selector
                 selectionKey = javaChannel().register(eventLoop().unwrappedSelector(), 0, this);
                 return;
             } catch (CancelledKeyException e) {
@@ -416,14 +418,14 @@ public abstract class AbstractNioChannel extends AbstractChannel {
     }
 
     /**
-     * Connect to the remote peer
-     */
-    protected abstract boolean doConnect(SocketAddress remoteAddress, SocketAddress localAddress) throws Exception;
-
-    /**
      * Finish the connect
      */
     protected abstract void doFinishConnect() throws Exception;
+
+    /**
+     * Connect to the remote peer
+     */
+    protected abstract boolean doConnect(SocketAddress remoteAddress, SocketAddress localAddress) throws Exception;
 
     /**
      * Returns an off-heap copy of the specified {@link ByteBuf}, and releases the original one.

@@ -52,6 +52,10 @@ public abstract class AbstractEventExecutor extends AbstractExecutorService impl
         return parent;
     }
 
+    /**
+     * 直接返回当前对象
+     * @return
+     */
     @Override
     public EventExecutor next() {
         return this;

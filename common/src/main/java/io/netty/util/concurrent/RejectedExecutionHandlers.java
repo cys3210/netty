@@ -42,6 +42,9 @@ public final class RejectedExecutionHandlers {
     }
 
     /**
+     *  当任务由于配置的时间限制，超时而无法添加到任务队列中，会尝试进行补偿
+     *  仅仅只会在 event loop 以外的线程调用时进行补偿
+     *
      * Tries to backoff when the task can not be added due restrictions for an configured amount of time. This
      * is only done if the task was added from outside of the event loop which means
      * {@link EventExecutor#inEventLoop()} returns {@code false}.
@@ -53,6 +56,7 @@ public final class RejectedExecutionHandlers {
             @Override
             public void rejected(Runnable task, SingleThreadEventExecutor executor) {
                 if (!executor.inEventLoop()) {
+                    // 多次尝试重新添加任务
                     for (int i = 0; i < retries; i++) {
                         // Try to wake up the executor so it will empty its task queue.
                         executor.wakeup(false);

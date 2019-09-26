@@ -76,8 +76,10 @@ public abstract class MultithreadEventExecutorGroup extends AbstractEventExecuto
             executor = new ThreadPerTaskExecutor(newDefaultThreadFactory());
         }
 
+        // 初始化时间处理器数组
         children = new EventExecutor[nThreads];
 
+        // 分别初始化每一个处理器
         for (int i = 0; i < nThreads; i ++) {
             boolean success = false;
             try {
@@ -108,8 +110,13 @@ public abstract class MultithreadEventExecutorGroup extends AbstractEventExecuto
             }
         }
 
+        // children 其实就是 eventExecutor 代表一个处理线程
+        // NioServerSocketChannel 最后会使用 NioEventLoop 进行每一个
+
+        // 创建 EventExecutor 选择器, 轮询之类的策略
         chooser = chooserFactory.newChooser(children);
 
+        // EventExecutor 终止时的监听器
         final FutureListener<Object> terminationListener = new FutureListener<Object>() {
             @Override
             public void operationComplete(Future<Object> future) throws Exception {
@@ -119,10 +126,12 @@ public abstract class MultithreadEventExecutorGroup extends AbstractEventExecuto
             }
         };
 
+        // 将监听器设置到每一个 EventExecutor 中
         for (EventExecutor e: children) {
             e.terminationFuture().addListener(terminationListener);
         }
 
+        // 创建一个不可变的 EventExecutor 集合
         Set<EventExecutor> childrenSet = new LinkedHashSet<EventExecutor>(children.length);
         Collections.addAll(childrenSet, children);
         readonlyChildren = Collections.unmodifiableSet(childrenSet);

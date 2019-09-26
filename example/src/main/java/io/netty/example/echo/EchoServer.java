@@ -49,19 +49,22 @@ public final class EchoServer {
         }
 
         // Configure the server.
-        EventLoopGroup bossGroup = new NioEventLoopGroup(1);
-        EventLoopGroup workerGroup = new NioEventLoopGroup();
+        EventLoopGroup bossGroup = new NioEventLoopGroup(1);    // boss 线程组 用于服务端接收客户端的连接
+        EventLoopGroup workerGroup = new NioEventLoopGroup();   // worker 线程组 用于进行socketChannel的数据
+
         final EchoServerHandler serverHandler = new EchoServerHandler();
         try {
             ServerBootstrap b = new ServerBootstrap();
-            b.group(bossGroup, workerGroup)
-             .channel(NioServerSocketChannel.class)
-             .option(ChannelOption.SO_BACKLOG, 100)
-             .handler(new LoggingHandler(LogLevel.INFO))
+            b.group(bossGroup, workerGroup) // 设置使用的 EventLoopGroup
+             .channel(NioServerSocketChannel.class) // 设置要被实例化的NioServerSocketChannel类
+             .option(ChannelOption.SO_BACKLOG, 100) // NioServerSocketChannel的可选项
+             .handler(new LoggingHandler(LogLevel.INFO)) // 设置NioServerSOcketChannel的处理器
              .childHandler(new ChannelInitializer<SocketChannel>() {
+                 // 在 接入的 Channel 初始化时进行的操作， ChannelInitializer是一个特殊的Handler一般会在Channel初始化时进行工作
                  @Override
                  public void initChannel(SocketChannel ch) throws Exception {
                      ChannelPipeline p = ch.pipeline();
+                     // 每一个接入 SocketChannel 的 处理Handler
                      if (sslCtx != null) {
                          p.addLast(sslCtx.newHandler(ch.alloc()));
                      }
@@ -72,7 +75,6 @@ public final class EchoServer {
 
             // Start the server.
             ChannelFuture f = b.bind(PORT).sync();
-
             // Wait until the server socket is closed.
             f.channel().closeFuture().sync();
         } finally {

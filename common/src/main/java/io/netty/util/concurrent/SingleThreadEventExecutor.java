@@ -44,11 +44,16 @@ import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
 import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
 
 /**
+ * 一个 Event loop 对应一个线程
+ *
  * Abstract base class for {@link OrderedEventExecutor}'s that execute all its submitted tasks in a single thread.
  *
  */
 public abstract class SingleThreadEventExecutor extends AbstractScheduledEventExecutor implements OrderedEventExecutor {
 
+    /**
+     * 最大任务等待数量
+     */
     static final int DEFAULT_MAX_PENDING_EXECUTOR_TASKS = Math.max(16,
             SystemPropertyUtil.getInt("io.netty.eventexecutor.maxPendingTasks", Integer.MAX_VALUE));
 
@@ -74,12 +79,23 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
         }
     };
 
+    /**
+     * state 的原子字段更新类
+     */
     private static final AtomicIntegerFieldUpdater<SingleThreadEventExecutor> STATE_UPDATER =
             AtomicIntegerFieldUpdater.newUpdater(SingleThreadEventExecutor.class, "state");
+    /**
+     * threadProperties 的原子引用更新类 unused
+     */
     private static final AtomicReferenceFieldUpdater<SingleThreadEventExecutor, ThreadProperties> PROPERTIES_UPDATER =
             AtomicReferenceFieldUpdater.newUpdater(
                     SingleThreadEventExecutor.class, ThreadProperties.class, "threadProperties");
 
+    /**
+     * 任务队列
+     *
+     * @see #newTaskQueue(int)
+     */
     private final Queue<Runnable> taskQueue;
 
     private volatile Thread thread;
@@ -319,6 +335,7 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
                 return true;
             }
             if (!taskQueue.offer(scheduledTask)) {
+                // taskQueue 如果满了， 直接加入 scheduleTaskQueue中等待下一次的加入
                 // No space left in the task queue add it back to the scheduledTaskQueue so we pick it up again.
                 scheduledTaskQueue.add((ScheduledFutureTask<?>) scheduledTask);
                 return false;
@@ -539,14 +556,18 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
     protected void afterRunningAllTasks() { }
 
     /**
+     * 距离下一个调度任务的开始调度的时间, 若没有找到 scheduled task 那么返回进行调度的间隔 1纳秒
+     *
      * Returns the amount of time left until the scheduled task with the closest dead line is executed.
      */
     protected long delayNanos(long currentTimeNanos) {
+        // 获得一个调度任务
         ScheduledFutureTask<?> scheduledTask = peekScheduledTask();
+        // 没有调度任务， 返回默认的 一分钟的调度间隔
         if (scheduledTask == null) {
             return SCHEDULE_PURGE_INTERVAL;
         }
-
+        // 返回调度任务的剩余的延迟调度时间
         return scheduledTask.delayNanos(currentTimeNanos);
     }
 
@@ -877,6 +898,7 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
         }
 
         boolean inEventLoop = inEventLoop();
+        // 添加到任务队列
         addTask(task);
         if (!inEventLoop) {
             startThread();
@@ -960,6 +982,68 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
         return threadProperties;
     }
 
+    private void run2() {
+        thread = Thread.currentThread();
+        if (interrupted) {
+            thread.interrupt();
+        }
+
+        boolean success = false;
+        // 更新最后执行时间
+        updateLastExecutionTime();
+        try {
+            // 执行任务
+            SingleThreadEventExecutor.this.run();
+            success = true;
+        } catch (Throwable t) {
+            logger.warn("Unexpected exception from an event executor: ", t);
+        } finally {
+            for (; ; ) {
+                int oldState = state;
+                if (oldState >= ST_SHUTTING_DOWN || STATE_UPDATER.compareAndSet(
+                        SingleThreadEventExecutor.this, oldState, ST_SHUTTING_DOWN)) {
+                    break;
+                }
+            }
+
+            // Check if confirmShutdown() was called at the end of the loop.
+            if (success && gracefulShutdownStartTime == 0) {
+                if (logger.isErrorEnabled()) {
+                    logger.error("Buggy " + EventExecutor.class.getSimpleName() + " implementation; " +
+                            SingleThreadEventExecutor.class.getSimpleName() + ".confirmShutdown() must " +
+                            "be called before run() implementation terminates.");
+                }
+            }
+
+            try {
+                // Run all remaining tasks and shutdown hooks.
+                for (; ; ) {
+                    if (confirmShutdown()) {
+                        break;
+                    }
+                }
+            } finally {
+                try {
+                    cleanup();
+                } finally {
+                    // Lets remove all FastThreadLocals for the Thread as we are about to terminate and notify
+                    // the future. The user may block on the future and once it unblocks the JVM may terminate
+                    // and start unloading classes.
+                    // See https://github.com/netty/netty/issues/6596.
+                    FastThreadLocal.removeAll();
+
+                    STATE_UPDATER.set(SingleThreadEventExecutor.this, ST_TERMINATED);
+                    threadLock.countDown();
+                    if (logger.isWarnEnabled() && !taskQueue.isEmpty()) {
+                        logger.warn("An event executor terminated with " +
+                                "non-empty task queue (" + taskQueue.size() + ')');
+                    }
+                    terminationFuture.setSuccess(null);
+                }
+            }
+        }
+    }
+
     /**
      * Marker interface for {@link Runnable} to indicate that it should be queued for execution
      * but does not need to run immediately. The default implementation of
@@ -1030,68 +1114,13 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
 
     private void doStartThread() {
         assert thread == null;
-        executor.execute(new Runnable() {
-            @Override
-            public void run() {
-                thread = Thread.currentThread();
-                if (interrupted) {
-                    thread.interrupt();
-                }
-
-                boolean success = false;
-                updateLastExecutionTime();
-                try {
-                    SingleThreadEventExecutor.this.run();
-                    success = true;
-                } catch (Throwable t) {
-                    logger.warn("Unexpected exception from an event executor: ", t);
-                } finally {
-                    for (;;) {
-                        int oldState = state;
-                        if (oldState >= ST_SHUTTING_DOWN || STATE_UPDATER.compareAndSet(
-                                SingleThreadEventExecutor.this, oldState, ST_SHUTTING_DOWN)) {
-                            break;
-                        }
-                    }
-
-                    // Check if confirmShutdown() was called at the end of the loop.
-                    if (success && gracefulShutdownStartTime == 0) {
-                        if (logger.isErrorEnabled()) {
-                            logger.error("Buggy " + EventExecutor.class.getSimpleName() + " implementation; " +
-                                    SingleThreadEventExecutor.class.getSimpleName() + ".confirmShutdown() must " +
-                                    "be called before run() implementation terminates.");
-                        }
-                    }
-
-                    try {
-                        // Run all remaining tasks and shutdown hooks.
-                        for (;;) {
-                            if (confirmShutdown()) {
-                                break;
-                            }
-                        }
-                    } finally {
-                        try {
-                            cleanup();
-                        } finally {
-                            // Lets remove all FastThreadLocals for the Thread as we are about to terminate and notify
-                            // the future. The user may block on the future and once it unblocks the JVM may terminate
-                            // and start unloading classes.
-                            // See https://github.com/netty/netty/issues/6596.
-                            FastThreadLocal.removeAll();
-
-                            STATE_UPDATER.set(SingleThreadEventExecutor.this, ST_TERMINATED);
-                            threadLock.countDown();
-                            if (logger.isWarnEnabled() && !taskQueue.isEmpty()) {
-                                logger.warn("An event executor terminated with " +
-                                        "non-empty task queue (" + taskQueue.size() + ')');
-                            }
-                            terminationFuture.setSuccess(null);
-                        }
-                    }
-                }
-            }
-        });
+        executor.execute(// Check if confirmShutdown() was called at the end of the loop.
+// Run all remaining tasks and shutdown hooks.
+// Lets remove all FastThreadLocals for the Thread as we are about to terminate and notify
+// the future. The user may block on the future and once it unblocks the JVM may terminate
+// and start unloading classes.
+// See https://github.com/netty/netty/issues/6596.
+                this::run2);
     }
 
     private static final class DefaultThreadProperties implements ThreadProperties {
