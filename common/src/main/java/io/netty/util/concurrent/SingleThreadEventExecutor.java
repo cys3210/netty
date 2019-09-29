@@ -914,7 +914,6 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
                     // In worst case we will log on termination.
                 }
                 if (reject) {
-                    reject();
                 }
             }
         }

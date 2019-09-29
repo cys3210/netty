@@ -35,13 +35,13 @@ public interface SelectStrategy {
      */
     int SELECT = -1;
     /**
-     * 代表 IO loop 应该被重试， 下一步不会进行 blocking select 操作
+     * 代表 IO loop 应该被重试， 下一步不会进行 blocking select 操作, 正常的 Nio 不会
      *
      * Indicates the IO loop should be retried, no blocking select to follow directly.
      */
     int CONTINUE = -2;
     /**
-     * 代表在 IO loop 会在不阻塞的情况下轮询新事件  NIO不支持
+     * 代表在 IO loop 会在不阻塞的情况下 poll 新事件  NIO不支持
      *
      * Indicates the IO loop to poll for new events without blocking.
      */
