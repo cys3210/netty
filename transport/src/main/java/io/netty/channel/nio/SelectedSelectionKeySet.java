@@ -21,6 +21,15 @@ import java.util.Arrays;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
 
+// 用数组代替原 set 的 hash 结构
+// 原来 HashSet add(...) 可能的复杂度为 O(1), O(lgn)
+// 优化之后一直会是 O(1)
+
+// 和 JDK 不同， Netty 保证了每一个 channel 和 selector 都只会注册一次， 像
+// register(), cancel()等操作都由 interestOps(...) 代替， 这也是为什么能用
+// 可重复的数组型 KeySet 。
+
+// JDK 注释：SelectionKey 实际上代表着 SelectableChannel 和 Selector 注册的唯一标识
 final class SelectedSelectionKeySet extends AbstractSet<SelectionKey> {
 
     SelectionKey[] keys;

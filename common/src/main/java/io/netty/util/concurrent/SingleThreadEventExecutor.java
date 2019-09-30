@@ -900,6 +900,8 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
         boolean inEventLoop = inEventLoop();
         // 添加到任务队列
         addTask(task);
+        // 如果当前线程不是 EventLoop 的运行线程,
+        // 当前EventLoop这里的意思是 EventLoop 线程还没有 start
         if (!inEventLoop) {
             startThread();
             if (isShutdown()) {
@@ -918,6 +920,7 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
             }
         }
 
+        // 当前任务需要唤醒 selector
         if (!addTaskWakesUp && wakesUpForTask(task)) {
             wakeup(inEventLoop);
         }

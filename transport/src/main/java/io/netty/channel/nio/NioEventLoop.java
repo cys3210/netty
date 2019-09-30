@@ -183,17 +183,21 @@ public final class NioEventLoop extends SingleThreadEventLoop {
     }
 
     private SelectorTuple openSelector() {
+        // 没有包装的 Selector
         final Selector unwrappedSelector;
         try {
+            // 此时 unwrappedSelector 就是 JDK 提供的 selector 对象
             unwrappedSelector = provider.openSelector();
         } catch (IOException e) {
             throw new ChannelException("failed to open a new selector", e);
         }
 
+        // 如果 ket set 的优化没开， 那么 selector 对象也使用 JDK 提供的 selector 对象
         if (DISABLE_KEY_SET_OPTIMIZATION) {
             return new SelectorTuple(unwrappedSelector);
         }
 
+        // 尝试获得一个 SelectorImpl 对象
         Object maybeSelectorImplClass = AccessController.doPrivileged(new PrivilegedAction<Object>() {
             @Override
             public Object run() {
@@ -208,6 +212,7 @@ public final class NioEventLoop extends SingleThreadEventLoop {
             }
         });
 
+        // SelectorImpl 对象如果获取失败， 则直接使用 JDK 提供的 Selector
         if (!(maybeSelectorImplClass instanceof Class) ||
             // ensure the current selector implementation is what we can instrument.
             !((Class<?>) maybeSelectorImplClass).isAssignableFrom(unwrappedSelector.getClass())) {
@@ -219,8 +224,10 @@ public final class NioEventLoop extends SingleThreadEventLoop {
         }
 
         final Class<?> selectorImplClass = (Class<?>) maybeSelectorImplClass;
+        // 创建 SelectedSelectionKeySet 对象
         final SelectedSelectionKeySet selectedKeySet = new SelectedSelectionKeySet();
 
+        // 尝试将 SelectedSelectionKeySet 设置到之前创建的 unwrappedSelector 的 selectedKeys 和 publicSelectedKeys 字段中
         Object maybeException = AccessController.doPrivileged(new PrivilegedAction<Object>() {
             @Override
             public Object run() {
@@ -265,6 +272,7 @@ public final class NioEventLoop extends SingleThreadEventLoop {
             }
         });
 
+        // 设置自定义 SelectedSelectionKeySet 对象失败， 直接使用 JDK 提供的 Selector
         if (maybeException instanceof Exception) {
             selectedKeys = null;
             Exception e = (Exception) maybeException;
@@ -528,8 +536,10 @@ public final class NioEventLoop extends SingleThreadEventLoop {
                         // 操作会被不必要的阻塞住
 
                         // 这里有点绕， 总结一下：wakenUp 主要是为了能够有效的执行 selector 的操作.
-                        // 在 netty 中若没有 task 任务会执行阻塞的 Selector.select(long) 方法， 如果有 task 任务会
-                        // 期望使用 Selector.selectNow() 这种非阻塞的方法
+                        // 在 netty 中若没有 task 任务会期望执行阻塞的 Selector.select(long) 方法， 如果有 task 任务会
+                        // 期望使用 Selector.selectNow() 这种非阻塞的方法。 如果过早的将 wakenUp 设置为 true , 那么会导致
+                        // wakenUp.compareAndSet(false, true) 一直失败，无法执行 Selector.selectNow 或是其他 wakeUp
+                        // 导致在有 task 需要执行的情况下还不去恰当的进行了阻塞。
 
                         if (wakenUp.get()) {
                             selector.wakeup();
@@ -600,6 +610,7 @@ public final class NioEventLoop extends SingleThreadEventLoop {
     private void processSelectedKeys() {
         // 开始处理 selectedKeys
         if (selectedKeys != null) {
+            // 使用优化过的 selectedKeys 进行
             processSelectedKeysOptimized();
         } else {
             processSelectedKeysPlain(selector.selectedKeys());
